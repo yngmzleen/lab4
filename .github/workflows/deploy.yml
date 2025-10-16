@@ -75,110 +75,13 @@ jobs:
             # Update or create index.html in repository root if it doesn't exist
             if [ ! -f "${REPO_NAME}/index.html" ]; then
               mkdir -p "${REPO_NAME}"
-              cat > "${REPO_NAME}/index.html" << 'EOF'
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Версии релизов</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 40px 20px;
-            margin: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .version-list {
-            list-style: none;
-            padding: 0;
-        }
-        .version-item {
-            margin-bottom: 15px;
-        }
-        .version-link {
-            display: block;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
-            font-weight: bold;
-        }
-        .version-link:hover {
-            transform: translateX(10px);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📦 Доступные версии релизов</h1>
-        <ul class="version-list" id="versions"></ul>
-    </div>
-    <script>
-        // Автоматическое определение доступных версий
-        fetch('.')
-            .then(r => r.text())
-            .then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const links = Array.from(doc.querySelectorAll('a'))
-                    .map(a => a.getAttribute('href'))
-                    .filter(href => href && href.startsWith('v'));
-                
-                const list = document.getElementById('versions');
-                if (links.length === 0) {
-                    list.innerHTML = '<li style="text-align: center; color: #666;">Версии будут доступны после создания релизов</li>';
-                } else {
-                    links.forEach(version => {
-                        const li = document.createElement('li');
-                        li.className = 'version-item';
-                        li.innerHTML = `<a href="${version}/" class="version-link">🚀 Версия ${version}</a>`;
-                        list.appendChild(li);
-                    });
-                }
-            })
-            .catch(() => {
-                document.getElementById('versions').innerHTML = 
-                    '<li style="text-align: center; color: #666;">Загрузка версий...</li>';
-            });
-    </script>
-</body>
-</html>
-EOF
+              echo '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Версии релизов</title></head><body><h1>Доступные версии релизов</h1><ul id="versions"></ul></body></html>' > "${REPO_NAME}/index.html"
             fi
             
             git add "${REPO_NAME}"
             
             # Create root index.html that redirects to latest
-            cat > index.html << EOF
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=${REPO_NAME}/${TAG}/index.html">
-    <title>Redirecting...</title>
-</head>
-<body>
-    <p>Redirecting to <a href="${REPO_NAME}/${TAG}/index.html">latest version</a>...</p>
-</body>
-</html>
-EOF
+            echo "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta http-equiv=\"refresh\" content=\"0; url=${REPO_NAME}/${TAG}/index.html\"><title>Redirecting...</title></head><body><p>Redirecting to <a href=\"${REPO_NAME}/${TAG}/index.html\">latest version</a>...</p></body></html>" > index.html
             git add index.html
             
           else
