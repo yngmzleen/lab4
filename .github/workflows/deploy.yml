@@ -17,98 +17,189 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: main
+          path: main-content
+      
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-content
+        continue-on-error: true
       
       - name: Setup Git
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
       
-      - name: Get release tag
-        id: get_tag
+      - name: Prepare gh-pages content
         run: |
+          # Create gh-pages directory if checkout failed
+          mkdir -p gh-pages-content
+          cd gh-pages-content
+          
+          # Initialize git if needed
+          if [ ! -d .git ]; then
+            git init
+            git checkout -b gh-pages
+          fi
+          
+          # Get event type and tag
           if [ "${{ github.event_name }}" == "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-            echo "is_release=true" >> $GITHUB_OUTPUT
+            TAG="${{ github.event.release.tag_name }}"
+            IS_RELEASE="true"
           else
-            echo "tag=latest" >> $GITHUB_OUTPUT
-            echo "is_release=false" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Deploy to gh-pages
-        run: |
-          TAG="${{ steps.get_tag.outputs.tag }}"
-          IS_RELEASE="${{ steps.get_tag.outputs.is_release }}"
-          
-          # Save current files to temp directory
-          TEMP_DIR=$(mktemp -d)
-          cp -r . "$TEMP_DIR/"
-          
-          # Try to fetch and checkout gh-pages, or create it if doesn't exist
-          git fetch origin gh-pages 2>/dev/null || true
-          
-          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
-            git checkout -b gh-pages origin/gh-pages
-          elif git rev-parse --verify gh-pages >/dev/null 2>&1; then
-            git checkout gh-pages
-          else
-            git checkout --orphan gh-pages
-            git rm -rf . 2>/dev/null || rm -rf * .* 2>/dev/null || true
+            TAG="latest"
+            IS_RELEASE="false"
           fi
           
-          # Copy files from temp directory (exclude .git)
-          rsync -av --exclude='.git' "$TEMP_DIR/" ./ 
-          rm -rf "$TEMP_DIR"
+          echo "Deploying tag: $TAG"
+          echo "Is release: $IS_RELEASE"
           
           if [ "$IS_RELEASE" == "true" ]; then
-            # For releases, create a versioned directory
+            # For releases, create versioned directory
             REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
             TARGET_DIR="${REPO_NAME}/${TAG}"
             
+            echo "Creating versioned directory: $TARGET_DIR"
             mkdir -p "$TARGET_DIR"
             
-            # Copy all files from lab4 directory to versioned directory
-            if [ -d "lab4" ]; then
-              cp -r lab4/* "$TARGET_DIR/"
-            else
-              cp -r * "$TARGET_DIR/" 2>/dev/null || true
-            fi
+            # Copy all files to versioned directory
+            cp -r ../main-content/index.html "$TARGET_DIR/" 2>/dev/null || true
+            cp -r ../main-content/ru "$TARGET_DIR/" 2>/dev/null || true
+            cp -r ../main-content/en "$TARGET_DIR/" 2>/dev/null || true
             
-            # Remove non-web files from target
-            rm -rf "$TARGET_DIR/.git" "$TARGET_DIR/.github" 2>/dev/null || true
-            
-            # Update or create index.html in repository root if it doesn't exist
+            # Create repository root index.html if doesn't exist
             if [ ! -f "${REPO_NAME}/index.html" ]; then
               mkdir -p "${REPO_NAME}"
-              echo '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Версии релизов</title></head><body><h1>Доступные версии релизов</h1><ul id="versions"></ul></body></html>' > "${REPO_NAME}/index.html"
+              cat > "${REPO_NAME}/index.html" << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Версии релизов</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .version-list {
+            list-style: none;
+            padding: 0;
+        }
+        .version-item {
+            margin-bottom: 15px;
+        }
+        .version-link {
+            display: block;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            transition: transform 0.3s ease;
+            font-weight: bold;
+            text-align: center;
+        }
+        .version-link:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 Доступные версии релизов</h1>
+        <ul class="version-list" id="versions">
+            <li style="text-align: center; color: #666;">Загрузка версий...</li>
+        </ul>
+    </div>
+    <script>
+        // Get all version directories
+        const repoPath = window.location.pathname.split('/').filter(p => p).slice(0, 2).join('/');
+        fetch(`https://api.github.com/repos/${{ github.repository }}/contents/${repoPath}?ref=gh-pages`)
+            .then(r => r.json())
+            .then(data => {
+                const versions = data
+                    .filter(item => item.type === 'dir' && item.name.startsWith('v'))
+                    .map(item => item.name)
+                    .sort()
+                    .reverse();
+                
+                const list = document.getElementById('versions');
+                if (versions.length === 0) {
+                    list.innerHTML = '<li style="text-align: center; color: #666;">Версии будут доступны после создания релизов</li>';
+                } else {
+                    list.innerHTML = versions.map(version => 
+                        `<li class="version-item">
+                            <a href="${version}/" class="version-link">🚀 Версия ${version}</a>
+                        </li>`
+                    ).join('');
+                }
+            })
+            .catch(() => {
+                document.getElementById('versions').innerHTML = 
+                    '<li style="text-align: center; color: #666;">Ошибка загрузки версий</li>';
+            });
+    </script>
+</body>
+</html>
+HTMLEOF
             fi
             
-            git add "${REPO_NAME}"
-            
-            # Create root index.html that redirects to latest
-            echo "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta http-equiv=\"refresh\" content=\"0; url=${REPO_NAME}/${TAG}/index.html\"><title>Redirecting...</title></head><body><p>Redirecting to <a href=\"${REPO_NAME}/${TAG}/index.html\">latest version</a>...</p></body></html>" > index.html
-            git add index.html
+            # Update root index.html to redirect to latest version
+            cat > index.html << HTMLEOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="0; url=${REPO_NAME}/${TAG}/index.html">
+    <title>Redirecting...</title>
+</head>
+<body>
+    <p>Redirecting to <a href="${REPO_NAME}/${TAG}/index.html">version ${TAG}</a>...</p>
+</body>
+</html>
+HTMLEOF
             
           else
-            # For regular commits, just update the root
-            if [ -d "lab4" ]; then
-              cp -r lab4/* .
-              rm -rf lab4
-            fi
+            # For regular commits, update root
+            cp -r ../main-content/index.html . 2>/dev/null || true
+            cp -r ../main-content/ru . 2>/dev/null || true
+            cp -r ../main-content/en . 2>/dev/null || true
             
-            # Clean up
-            rm -rf .github .git 2>/dev/null || true
-            
-            git add .
+            # Remove workflow and other files
+            rm -rf .github .gitignore README.md 2>/dev/null || true
           fi
           
-          # Commit and push
+          # Add all changes
+          git add -A
+          
+          # Commit and push if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "Deploy ${TAG} to GitHub Pages"
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git 2>/dev/null || true
             git push origin gh-pages --force
           fi
