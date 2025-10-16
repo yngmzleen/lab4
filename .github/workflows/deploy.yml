@@ -27,11 +27,51 @@ jobs:
         with:
           python-version: '3.x'
       
+      - name: Auto-create release on push
+        id: auto_release
+        if: github.event_name == 'push'
+        run: |
+          # Получаем последний тег
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          
+          # Извлекаем версию (удаляем 'v' в начале)
+          VERSION=${LAST_TAG#v}
+          
+          # Разбиваем на части (major.minor.patch)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+          # Инкрементируем patch версию
+          PATCH=$((PATCH + 1))
+          
+          # Формируем новую версию
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          
+          # Создаем тег
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git tag -a "$NEW_VERSION" -m "Auto-release $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+          
+          # Создаем релиз через GitHub API
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d "{\"tag_name\":\"$NEW_VERSION\",\"name\":\"Release $NEW_VERSION\",\"body\":\"Auto-generated release from commit ${{ github.sha }}\",\"draft\":false,\"prerelease\":false}"
+          
+          echo "created_release=true" >> $GITHUB_OUTPUT
+          echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
+      
       - name: Prepare deployment
         id: prepare
         run: |
           if [ "${{ github.event_name }}" == "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.auto_release.outputs.created_release }}" == "true" ]; then
+            echo "tag=${{ steps.auto_release.outputs.new_tag }}" >> $GITHUB_OUTPUT
             echo "is_release=true" >> $GITHUB_OUTPUT
           else
             echo "tag=latest" >> $GITHUB_OUTPUT
@@ -49,6 +89,9 @@ jobs:
           if [ "$IS_RELEASE" == "true" ]; then
             mkdir -p "deploy/${REPO_NAME}/${TAG}"
             cp -r index.html ru en "deploy/${REPO_NAME}/${TAG}/"
+            
+            # Добавляем информацию о версии в HTML файлы
+            python3 .github/scripts/add_version_info.py "deploy/${REPO_NAME}/${TAG}" "${TAG}"
             
             python3 .github/scripts/generate_html.py "${REPO_NAME}" "${TAG}" "${{ github.repository }}"
           else
