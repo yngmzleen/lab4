@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабораторная работа №4</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .nav {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .nav a {
+            margin: 0 15px;
+            text-decoration: none;
+            color: #0066cc;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Лабораторная работа №4</h1>
+    
+    <div class="nav">
+        <a href="ru/index.html">Русский</a> | 
+        <a href="en/index.html">English</a>
+    </div>
+    
+    <p><strong>Дисциплина:</strong> Разработка программных приложений</p>
+
+    <div id="version-selector" style="position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000;">
+        <label for="version-select" style="font-weight: bold; margin-right: 5px;">Версия:</label>
+        <select id="version-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+            <option value="current">Загрузка...</option>
+        </select>
+    </div>
+    <script>
+        (function() {
+            const currentVersion = 'v1.0.2';
+            const repoName = 'lab4';
+            const currentPath = window.location.pathname;
+            const isRuPage = currentPath.includes('/ru/');
+            const isEnPage = currentPath.includes('/en/');
+            
+            // Загружаем список версий
+            fetch('https://api.github.com/repos/' + window.location.pathname.split('/')[1] + '/' + repoName + '/git/trees/gh-pages?recursive=1')
+                .then(r => r.json())
+                .then(data => {
+                    const versions = [...new Set(data.tree
+                        .filter(item => item.path.includes('/' + repoName + '/v') && item.type === 'tree')
+                        .map(item => {
+                            const parts = item.path.split('/');
+                            return parts.find(p => p.startsWith('v'));
+                        }))].filter(v => v).sort().reverse();
+                    
+                    const select = document.getElementById('version-select');
+                    select.innerHTML = '';
+                    
+                    versions.forEach(version => {
+                        const option = document.createElement('option');
+                        option.value = version;
+                        option.textContent = version + (version === currentVersion ? ' (текущая)' : '');
+                        if (version === currentVersion) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                    
+                    // Обработчик смены версии
+                    select.addEventListener('change', function() {
+                        const selectedVersion = this.value;
+                        let newPath = '/' + repoName + '/' + selectedVersion + '/';
+                        
+                        if (isRuPage) {
+                            newPath += 'ru/';
+                        } else if (isEnPage) {
+                            newPath += 'en/';
+                        }
+                        
+                        window.location.href = newPath;
+                    });
+                })
+                .catch(err => {
+                    console.error('Ошибка загрузки версий:', err);
+                    document.getElementById('version-select').innerHTML = '<option>Ошибка загрузки</option>';
+                });
+        })();
+    </script>
+    
+
+    <div style="position: fixed; bottom: 10px; right: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 999;">
+        📦 v1.0.2
+    </div>
+    
+</body>
+</html>
+

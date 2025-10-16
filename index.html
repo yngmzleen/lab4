@@ -2,10 +2,46 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0; url=lab4/v1.2.0/index.html">
+<meta http-equiv="refresh" content="0; url=lab4/v1.0.2/index.html">
 <title>Redirecting...</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.container {
+    text-align: center;
+}
+.spinner {
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 5px solid white;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+a {
+    color: white;
+    text-decoration: underline;
+}
+</style>
 </head>
 <body>
-<p>Redirecting to <a href="lab4/v1.2.0/index.html">version v1.2.0</a>...</p>
+<div class="container">
+    <h1>🚀 Перенаправление на версию v1.0.2</h1>
+    <div class="spinner"></div>
+    <p>Если автоматический переход не работает, <a href="lab4/v1.0.2/index.html">нажмите здесь</a></p>
+</div>
 </body>
 </html>
