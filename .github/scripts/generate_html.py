@@ -224,14 +224,14 @@ h1 {{
         versionsList.innerHTML = versions.map((version, index) => {{
             const isLatest = index === 0;
             const badgeClass = isLatest ? 'latest-badge' : '';
-            const badgeText = isLatest ? 'Последняя' : `${versions.length - index} из ${versions.length}`;
+            const badgeText = isLatest ? 'Последняя' : (versions.length - index) + ' из ' + versions.length;
             
-            return `<li class="version-item">
-                <a href="${{version}}/" class="version-link">
-                    <span class="version-name">🚀 Версия ${{version}}</span>
-                    <span class="version-badge ${{badgeClass}}">${{badgeText}}</span>
-                </a>
-            </li>`;
+            return '<li class="version-item">' +
+                '<a href="' + version + '/" class="version-link">' +
+                    '<span class="version-name">🚀 Версия ' + version + '</span>' +
+                    '<span class="version-badge ' + badgeClass + '">' + badgeText + '</span>' +
+                '</a>' +
+            '</li>';
         }}).join('');
     }}
     
