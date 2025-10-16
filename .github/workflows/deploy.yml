@@ -17,189 +17,112 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout main branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
-          path: main-content
+          fetch-depth: 0
       
-      - name: Checkout gh-pages branch
-        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          ref: gh-pages
-          path: gh-pages-content
-        continue-on-error: true
+          python-version: '3.x'
       
-      - name: Setup Git
+      - name: Prepare deployment
+        id: prepare
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-      
-      - name: Prepare gh-pages content
-        run: |
-          # Create gh-pages directory if checkout failed
-          mkdir -p gh-pages-content
-          cd gh-pages-content
-          
-          # Initialize git if needed
-          if [ ! -d .git ]; then
-            git init
-            git checkout -b gh-pages
-          fi
-          
-          # Get event type and tag
           if [ "${{ github.event_name }}" == "release" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-            IS_RELEASE="true"
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
           else
-            TAG="latest"
-            IS_RELEASE="false"
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
           fi
+      
+      - name: Build deployment directory
+        run: |
+          TAG="${{ steps.prepare.outputs.tag }}"
+          IS_RELEASE="${{ steps.prepare.outputs.is_release }}"
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
           
-          echo "Deploying tag: $TAG"
-          echo "Is release: $IS_RELEASE"
+          mkdir -p deploy
           
           if [ "$IS_RELEASE" == "true" ]; then
-            # For releases, create versioned directory
-            REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
-            TARGET_DIR="${REPO_NAME}/${TAG}"
+            mkdir -p "deploy/${REPO_NAME}/${TAG}"
+            cp -r index.html ru en "deploy/${REPO_NAME}/${TAG}/"
             
-            echo "Creating versioned directory: $TARGET_DIR"
-            mkdir -p "$TARGET_DIR"
-            
-            # Copy all files to versioned directory
-            cp -r ../main-content/index.html "$TARGET_DIR/" 2>/dev/null || true
-            cp -r ../main-content/ru "$TARGET_DIR/" 2>/dev/null || true
-            cp -r ../main-content/en "$TARGET_DIR/" 2>/dev/null || true
-            
-            # Create repository root index.html if doesn't exist
-            if [ ! -f "${REPO_NAME}/index.html" ]; then
-              mkdir -p "${REPO_NAME}"
-              cat > "${REPO_NAME}/index.html" << 'HTMLEOF'
-<!DOCTYPE html>
+            python3 << PYEOF
+import os
+repo_name = "${REPO_NAME}"
+tag = "${TAG}"
+repo_full = "${{ github.repository }}"
+
+versions_html = """<!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Версии релизов</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 40px 20px;
-            margin: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .version-list {
-            list-style: none;
-            padding: 0;
-        }
-        .version-item {
-            margin-bottom: 15px;
-        }
-        .version-link {
-            display: block;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
-            font-weight: bold;
-            text-align: center;
-        }
-        .version-link:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Версии релизов</title>
+<style>
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 40px 20px; margin: 0; }
+.container { max-width: 800px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }
+h1 { color: #333; text-align: center; margin-bottom: 30px; }
+.version-list { list-style: none; padding: 0; }
+.version-item { margin-bottom: 15px; }
+.version-link { display: block; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 10px; transition: transform 0.3s ease; font-weight: bold; text-align: center; }
+.version-link:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>📦 Доступные версии релизов</h1>
-        <ul class="version-list" id="versions">
-            <li style="text-align: center; color: #666;">Загрузка версий...</li>
-        </ul>
-    </div>
-    <script>
-        // Get all version directories
-        const repoPath = window.location.pathname.split('/').filter(p => p).slice(0, 2).join('/');
-        fetch(`https://api.github.com/repos/${{ github.repository }}/contents/${repoPath}?ref=gh-pages`)
-            .then(r => r.json())
-            .then(data => {
-                const versions = data
-                    .filter(item => item.type === 'dir' && item.name.startsWith('v'))
-                    .map(item => item.name)
-                    .sort()
-                    .reverse();
-                
-                const list = document.getElementById('versions');
-                if (versions.length === 0) {
-                    list.innerHTML = '<li style="text-align: center; color: #666;">Версии будут доступны после создания релизов</li>';
-                } else {
-                    list.innerHTML = versions.map(version => 
-                        `<li class="version-item">
-                            <a href="${version}/" class="version-link">🚀 Версия ${version}</a>
-                        </li>`
-                    ).join('');
-                }
-            })
-            .catch(() => {
-                document.getElementById('versions').innerHTML = 
-                    '<li style="text-align: center; color: #666;">Ошибка загрузки версий</li>';
-            });
-    </script>
+<div class="container">
+<h1>📦 Доступные версии релизов</h1>
+<ul class="version-list" id="versions"><li style="text-align: center; color: #666;">Загрузка версий...</li></ul>
+</div>
+<script>
+fetch('https://api.github.com/repos/""" + repo_full + """/git/trees/gh-pages?recursive=1')
+.then(r => r.json())
+.then(data => {
+const versions = [...new Set(data.tree.filter(item => item.path.includes('/v') && item.type === 'tree').map(item => item.path.split('/')[1]))].filter(v => v.startsWith('v')).sort().reverse();
+const list = document.getElementById('versions');
+if (versions.length === 0) {
+list.innerHTML = '<li style="text-align: center; color: #666;">Версии будут доступны после создания релизов</li>';
+} else {
+list.innerHTML = versions.map(version => '<li class="version-item"><a href="' + version + '/" class="version-link">🚀 Версия ' + version + '</a></li>').join('');
+}
+})
+.catch(() => { document.getElementById('versions').innerHTML = '<li style="text-align: center; color: #666;">Ошибка загрузки версий</li>'; });
+</script>
 </body>
-</html>
-HTMLEOF
-            fi
-            
-            # Update root index.html to redirect to latest version
-            cat > index.html << HTMLEOF
-<!DOCTYPE html>
+</html>"""
+
+os.makedirs(f"deploy/{repo_name}", exist_ok=True)
+with open(f"deploy/{repo_name}/index.html", "w", encoding="utf-8") as f:
+    f.write(versions_html)
+
+redirect_html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=${REPO_NAME}/${TAG}/index.html">
-    <title>Redirecting...</title>
+<meta charset="UTF-8">
+<meta http-equiv="refresh" content="0; url={repo_name}/{tag}/index.html">
+<title>Redirecting...</title>
 </head>
 <body>
-    <p>Redirecting to <a href="${REPO_NAME}/${TAG}/index.html">version ${TAG}</a>...</p>
+<p>Redirecting to <a href="{repo_name}/{tag}/index.html">version {tag}</a>...</p>
 </body>
-</html>
-HTMLEOF
+</html>"""
+
+with open("deploy/index.html", "w", encoding="utf-8") as f:
+    f.write(redirect_html)
+
+print(f"Generated HTML files for release {tag}")
+PYEOF
             
           else
-            # For regular commits, update root
-            cp -r ../main-content/index.html . 2>/dev/null || true
-            cp -r ../main-content/ru . 2>/dev/null || true
-            cp -r ../main-content/en . 2>/dev/null || true
-            
-            # Remove workflow and other files
-            rm -rf .github .gitignore README.md 2>/dev/null || true
+            cp -r index.html ru en deploy/
           fi
-          
-          # Add all changes
-          git add -A
-          
-          # Commit and push if there are changes
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Deploy ${TAG} to GitHub Pages"
-            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git 2>/dev/null || true
-            git push origin gh-pages --force
-          fi
+      
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          keep_files: true
